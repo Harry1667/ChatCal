@@ -1,0 +1,23 @@
+# Mac 系統垃圾
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+02-web/node_modules/
+02-web/.env
+02-web/.env.local
+
+# SQLite 資料庫（不上傳，伺服器自己建）
+02-web/chatcal.sqlite
+02-web/chatcal.sqlite-shm
+02-web/chatcal.sqlite-wal
+
+# 部署密碼文件（禁止上傳）
+01-dev/001-deploy-docs/deploymemorydoc.md

@@ -1,0 +1,29 @@
+# 環境變數與密鑰
+.env
+*.key
+*.pem
+secrets.json
+
+# Node
+node_modules/
+dist/
+build/
+.cache/
+
+# SQLite 資料庫
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# macOS
+.DS_Store
+._*
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+.gstack/

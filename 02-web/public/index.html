@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>手帳 · ChatCal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;700&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="book">
+    <!-- 左頁：月曆 + 搜尋 + 近日 + 設定 -->
+    <aside class="page page-left">
+      <div class="masthead">
+        <div class="brand">
+          <div class="brand-zh">手帳</div>
+          <div class="brand-en">ChatCal · journal</div>
+        </div>
+        <div class="today-chip" id="todayChip">—</div>
+      </div>
+
+      <section class="search">
+        <input type="text" id="searchInput" placeholder="🔍 搜尋…" autocomplete="off" />
+        <div class="search-results" id="searchResults" hidden></div>
+      </section>
+
+      <section class="calendar">
+        <div class="cal-header">
+          <button class="cal-nav" id="prevMonth">‹</button>
+          <div class="cal-title" id="calTitle">—</div>
+          <button class="cal-nav" id="nextMonth">›</button>
+        </div>
+        <div class="cal-weekdays">
+          <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </section>
+
+      <section class="upcoming">
+        <div class="section-title">近日</div>
+        <ul class="upcoming-list" id="upcomingList">
+          <li class="muted">—</li>
+        </ul>
+      </section>
+
+      <section class="settings">
+        <div class="section-title">提醒</div>
+        <div class="setting-row">
+          <label>☀️ 早報（今日）</label>
+          <div class="time-input">
+            <input type="number" id="briefHour" min="0" max="23" />
+            <span>:</span>
+            <input type="number" id="briefMinute" min="0" max="59" />
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>🌙 晚報（明日+日記）</label>
+          <div class="time-input">
+            <input type="number" id="reflectHour" min="0" max="23" />
+            <span>:</span>
+            <input type="number" id="reflectMinute" min="0" max="59" />
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>📊 週日回顧</label>
+          <div class="time-input">
+            <input type="number" id="weeklyHour" min="0" max="23" />
+            <span>:</span>
+            <input type="number" id="weeklyMinute" min="0" max="59" />
+          </div>
+        </div>
+        <div class="setting-row compact">
+          <label><input type="checkbox" id="reminderEnabled" /> 事前 60/30 分鐘提醒</label>
+        </div>
+        <div class="setting-row compact">
+          <label><input type="checkbox" id="reflectEnabled" /> 晚報</label>
+        </div>
+        <div class="setting-row compact">
+          <label><input type="checkbox" id="weeklyEnabled" /> 週日回顧</label>
+        </div>
+        <div class="setting-row">
+          <button id="saveSettings" class="btn-ghost">存設定</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- 右頁：當天時間軸 + 反思 + 快速輸入 -->
+    <main class="page page-right">
+      <header class="day-head">
+        <div class="day-date">
+          <div class="day-number" id="dayNumber">—</div>
+          <div class="day-meta">
+            <div class="day-month" id="dayMonth">—</div>
+            <div class="day-weekday" id="dayWeekday">—</div>
+          </div>
+        </div>
+        <div class="day-pager">
+          <button class="page-btn" id="prevDay">◁ 前一天</button>
+          <button class="page-btn" id="goToday">今日</button>
+          <button class="page-btn" id="nextDay">後一天 ▷</button>
+        </div>
+      </header>
+
+      <section class="timeline" id="timeline">
+        <div class="empty-state">
+          <div class="empty-quill">✒︎</div>
+          <div>今天手帳還空著。</div>
+        </div>
+      </section>
+
+      <section class="reflection-card" id="reflectionCard">
+        <div class="reflection-head">
+          <span class="reflection-label">今日反思</span>
+          <span class="reflection-mood" id="reflectionMood"></span>
+        </div>
+        <textarea id="reflectionText" placeholder="回頭看看這一天… 寫下心情與收穫"></textarea>
+        <div class="reflection-actions">
+          <div class="mood-picker" id="moodPicker">
+            <span data-mood="😊">😊</span>
+            <span data-mood="😌">😌</span>
+            <span data-mood="🥲">🥲</span>
+            <span data-mood="😤">😤</span>
+            <span data-mood="😴">😴</span>
+            <span data-mood="🎉">🎉</span>
+            <span data-mood="💪">💪</span>
+            <span data-mood="🌧️">🌧️</span>
+          </div>
+          <button id="saveReflection" class="btn-ghost">存</button>
+        </div>
+      </section>
+
+      <footer class="quick-input">
+        <input
+          type="text"
+          id="quickInput"
+          placeholder="隨手寫一筆…例：明天下午三點跟教授討論論文，要帶筆電"
+          autocomplete="off"
+        />
+        <button id="quickSubmit">寫入</button>
+      </footer>
+    </main>
+  </div>
+
+  <!-- 事件詳情 modal -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title" id="modalTitle">—</div>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>標題</label>
+          <input type="text" id="editTitle" />
+        </div>
+        <div class="field">
+          <label>時間</label>
+          <div class="time-range">
+            <input type="datetime-local" id="editStart" />
+            <span>～</span>
+            <input type="datetime-local" id="editEnd" />
+          </div>
+        </div>
+        <div class="field">
+          <label>重複</label>
+          <select id="editRepeat">
+            <option value="none">不重複</option>
+            <option value="daily">每天</option>
+            <option value="weekly">每週</option>
+            <option value="monthly">每月</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>詳細說明</label>
+          <textarea id="editDescription" rows="3"></textarea>
+        </div>
+        <div class="field">
+          <label>手寫備註</label>
+          <textarea id="editNotes" rows="3" placeholder="回頭補的想法、心得…"></textarea>
+        </div>
+        <div class="field">
+          <label>狀態</label>
+          <select id="editStatus">
+            <option value="pending">待辦</option>
+            <option value="done">完成</option>
+            <option value="missed">錯過</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-danger" id="btnDelete">刪除</button>
+        <div class="spacer"></div>
+        <button class="btn-ghost" id="btnCancel">取消</button>
+        <button class="btn-primary" id="btnSave">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

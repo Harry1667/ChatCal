@@ -1,0 +1,21 @@
+{
+  "name": "chatcal",
+  "version": "2.0.0",
+  "description": "ChatCal 手帳 — Discord 輸入 + 每日匯報 + 事前提醒 + 日誌風 Web",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "bot": "node bot.mjs",
+    "dev": "node server.mjs & node bot.mjs"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
+    "better-sqlite3": "^11.0.0",
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.0"
+  }
+}
