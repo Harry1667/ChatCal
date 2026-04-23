@@ -19,7 +19,7 @@ import {
 } from './db.mjs'
 import { writeWeeklyReview, generateReflectionPrompt } from './ai.mjs'
 
-const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID
+const CHANNEL_ID_ENV = process.env.DISCORD_CHANNEL_ID
 
 const DEFAULTS = {
   brief_hour: '8',
@@ -79,15 +79,13 @@ export function initCron(client) {
   console.log('[Cron] 已排程（早報 / 晚報 / 週回顧 / 提醒）')
 }
 
-async function sendToChannel(payload) {
-  if (!discordClient || !CHANNEL_ID) return
-  const channel = await discordClient.channels.fetch(CHANNEL_ID)
+async function sendToChannel(payload, type = 'reminder') {
+  if (!discordClient) return
+  const channelId = getSetting('discord_channel_' + type) || CHANNEL_ID_ENV
+  if (!channelId) return
+  const channel = await discordClient.channels.fetch(channelId).catch(() => null)
   if (!channel) return
-  if (typeof payload === 'string') {
-    await channel.send(payload)
-  } else {
-    await channel.send(payload)
-  }
+  await channel.send(payload)
 }
 
 function fmtTime(iso) {
@@ -140,7 +138,7 @@ export async function sendMorningReport() {
     embed.addFields({ name: '📌 待辦', value: buildUntimedText(today).slice(0, 1024) })
   }
 
-  await sendToChannel({ embeds: [embed] })
+  await sendToChannel({ embeds: [embed] }, 'reminder')
   console.log(`[Cron] 早報送出，${today.length} 件`)
 }
 
@@ -188,7 +186,7 @@ export async function sendEveningReport() {
     value: `${line}\n\n用 \`/reflect mood:😊 text:今天...\` 寫一下，或直接打字告訴我。`,
   })
 
-  await sendToChannel({ embeds: [embed] })
+  await sendToChannel({ embeds: [embed] }, 'diary')
   console.log(`[Cron] 晚報送出，明日 ${tomorrow.length} 件`)
 }
 
@@ -235,7 +233,7 @@ async function sendOneReminder(ev, minutes) {
     new ButtonBuilder().setCustomId(`snooze_${ev.id}`).setLabel('推遲30分').setStyle(ButtonStyle.Secondary),
   )
 
-  await sendToChannel({ embeds: [embed], components: [row] })
+  await sendToChannel({ embeds: [embed], components: [row] }, 'reminder')
   console.log(`[Cron] 提醒 (${minutes}min${ev.is_urgent ? ' 🔴' : ''}): ${ev.title}`)
 }
 
@@ -253,7 +251,7 @@ export async function sendWeeklyReview() {
 
   const total = done.length + missed.length + pending.length
   if (total === 0 && reflections.length === 0) {
-    await sendToChannel(`📊 **本週回顧**\n\n本週手帳空空的，多寫一點吧。`)
+    await sendToChannel(`📊 **本週回顧**\n\n本週手帳空空的，多寫一點吧。`, 'diary')
     return
   }
 
@@ -263,6 +261,6 @@ export async function sendWeeklyReview() {
   const review = await writeWeeklyReview({ done, missed, pending, reflections })
   const body = review ? `\n${review}` : ''
 
-  await sendToChannel(header + body)
+  await sendToChannel(header + body, 'diary')
   console.log('[Cron] 週回顧已送出')
 }

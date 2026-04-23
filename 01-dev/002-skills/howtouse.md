@@ -1,3 +1,0 @@
-把這個skills裝到全局下，裝proxycli用skills，設env
-
-這個專案用到的所有ai功能都走proxy cli

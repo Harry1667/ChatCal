@@ -16,7 +16,7 @@ import {
   insertEvent, updateEvent, deleteEvent, getEvent,
   getTodayEvents, getRecentEvents, searchEvents,
   getEventsForAIContext, getInboxEvents,
-  upsertReflection, getReflection,
+  upsertReflection, getReflection, getSetting,
 } from './db.mjs'
 import { initCron, sendMorningReport, sendEveningReport, sendWeeklyReview } from './cron.mjs'
 
@@ -159,8 +159,9 @@ function saveOneEvent(parsed, text) {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return
 
-  if (CHANNEL_ID) {
-    if (message.channel.id !== CHANNEL_ID) return
+  const recordChannelId = getSetting('discord_channel_record') || CHANNEL_ID
+  if (recordChannelId) {
+    if (message.channel.id !== recordChannelId) return
   } else {
     const isDM = !message.guild
     const isMentioned = message.mentions.has(client.user)

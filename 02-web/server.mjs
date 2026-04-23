@@ -249,18 +249,23 @@ app.get('/api/settings', auth, (req, res) => {
     reminder_enabled: getSetting('cron_reminder_enabled') || 'true',
     reflect_enabled: getSetting('cron_reflect_enabled') || 'true',
     weekly_enabled: getSetting('cron_weekly_enabled') || 'true',
+    discord_channel_record: getSetting('discord_channel_record') || '',
+    discord_channel_reminder: getSetting('discord_channel_reminder') || '',
+    discord_channel_diary: getSetting('discord_channel_diary') || '',
   })
 })
 
 app.put('/api/settings', auth, (req, res) => {
-  const allow = [
+  const cronKeys = [
     'brief_hour', 'brief_minute',
     'reflect_hour', 'reflect_minute',
     'weekly_hour', 'weekly_minute',
     'reminder_enabled', 'reflect_enabled', 'weekly_enabled',
   ]
+  const discordKeys = ['discord_channel_record', 'discord_channel_reminder', 'discord_channel_diary']
   for (const [k, v] of Object.entries(req.body)) {
-    if (allow.includes(k)) setSetting('cron_' + k, String(v))
+    if (cronKeys.includes(k)) setSetting('cron_' + k, String(v))
+    else if (discordKeys.includes(k)) setSetting(k, String(v))
   }
   res.json({ success: true })
 })

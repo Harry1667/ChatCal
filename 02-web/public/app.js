@@ -444,6 +444,9 @@ async function deleteEvt() {
 async function loadSettings() {
   try {
     const s = await api('/api/settings')
+    document.getElementById('channelRecord').value = s.discord_channel_record || ''
+    document.getElementById('channelReminder').value = s.discord_channel_reminder || ''
+    document.getElementById('channelDiary').value = s.discord_channel_diary || ''
     document.getElementById('briefHour').value = s.brief_hour || '8'
     document.getElementById('briefMinute').value = s.brief_minute || '0'
     document.getElementById('reflectHour').value = s.reflect_hour || '22'
@@ -458,6 +461,9 @@ async function loadSettings() {
 
 async function saveSettings() {
   const body = {
+    discord_channel_record: document.getElementById('channelRecord').value.trim(),
+    discord_channel_reminder: document.getElementById('channelReminder').value.trim(),
+    discord_channel_diary: document.getElementById('channelDiary').value.trim(),
     brief_hour: document.getElementById('briefHour').value || '8',
     brief_minute: document.getElementById('briefMinute').value || '0',
     reflect_hour: document.getElementById('reflectHour').value || '22',
