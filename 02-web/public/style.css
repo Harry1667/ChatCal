@@ -707,15 +707,9 @@ html, body {
   --stamp:     #c45050;
   --leaf:      #8aaa50;
 }
-[data-theme="dark"] html,
-[data-theme="dark"] body,
-body[data-theme="dark"] {
+[data-theme="dark"] body {
   background: radial-gradient(ellipse at top, #1e1a10 0%, #120f07 100%);
 }
-[data-theme="dark"] .book { background: var(--paper); }
-[data-theme="dark"] .search-results { background: var(--paper-2); }
-[data-theme="dark"] .modal { background: var(--paper); }
-[data-theme="dark"] .settings-panel { background: var(--paper); }
 
 /* === 設定按鈕（masthead） === */
 .settings-btn {

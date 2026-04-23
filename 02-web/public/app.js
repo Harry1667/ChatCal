@@ -441,7 +441,7 @@ async function deleteEvt() {
 
 // === 深色模式 ===
 function applyDarkMode(on) {
-  document.body.setAttribute('data-theme', on ? 'dark' : '')
+  document.documentElement.setAttribute('data-theme', on ? 'dark' : '')
   document.getElementById('darkModeToggle').checked = !!on
   localStorage.setItem('chatcal_dark', on ? '1' : '')
 }
