@@ -14,7 +14,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import {
   getTodayEvents, getTomorrowEvents,
   getPendingReminders, updateEvent, markOverdueMissed,
-  getSetting,
+  getSetting, getDiscordTargets,
   getEventsByStatusInRange, getReflectionsByRange,
 } from './db.mjs'
 import { writeWeeklyReview, generateReflectionPrompt } from './ai.mjs'
@@ -81,11 +81,13 @@ export function initCron(client) {
 
 async function sendToChannel(payload, type = 'reminder') {
   if (!discordClient) return
-  const channelId = getSetting('discord_channel_' + type) || CHANNEL_ID_ENV
-  if (!channelId) return
-  const channel = await discordClient.channels.fetch(channelId).catch(() => null)
-  if (!channel) return
-  await channel.send(payload)
+  const targets = getDiscordTargets()
+  const ids = new Set(targets.map(t => t['channel_' + type]).filter(Boolean))
+  if (ids.size === 0 && CHANNEL_ID_ENV) ids.add(CHANNEL_ID_ENV)
+  for (const channelId of ids) {
+    const ch = await discordClient.channels.fetch(channelId).catch(() => null)
+    if (ch) await ch.send(payload).catch(err => console.error('[Cron] send failed:', err.message))
+  }
 }
 
 function fmtTime(iso) {

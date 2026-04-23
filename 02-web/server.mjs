@@ -32,6 +32,7 @@ import {
   upsertReflection, getReflection, getReflectionsByRange,
   getEventsByStatusInRange,
   getSetting, setSetting,
+  getDiscordTargets, upsertDiscordTarget, deleteDiscordTarget,
 } from './db.mjs'
 import { parseText } from './ai.mjs'
 
@@ -266,8 +267,44 @@ app.put('/api/settings', auth, (req, res) => {
   for (const [k, v] of Object.entries(req.body)) {
     if (cronKeys.includes(k)) setSetting('cron_' + k, String(v))
     else if (discordKeys.includes(k)) setSetting(k, String(v))
+    else if (k === 'web_password') setSetting('web_password', String(v))
   }
   res.json({ success: true })
+})
+
+// === discord-targets ===
+app.get('/api/discord-targets', auth, (req, res) => {
+  try { res.json(getDiscordTargets()) } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/discord-targets', auth, (req, res) => {
+  try { res.json(upsertDiscordTarget(req.body)) } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/discord-targets/:id', auth, (req, res) => {
+  try {
+    const t = upsertDiscordTarget({ id: parseInt(req.params.id), ...req.body })
+    if (!t) return res.status(404).json({ error: '找不到' })
+    res.json(t)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/discord-targets/:id', auth, (req, res) => {
+  try {
+    const ok = deleteDiscordTarget(parseInt(req.params.id))
+    res.json({ ok })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// === auth (web password gate) ===
+app.get('/api/auth', (req, res) => {
+  res.json({ hasPassword: !!getSetting('web_password') })
+})
+
+app.post('/api/auth', (req, res) => {
+  const stored = getSetting('web_password')
+  if (!stored) return res.json({ ok: true, hasPassword: false })
+  res.json({ ok: req.body.password === stored, hasPassword: true })
 })
 
 app.listen(PORT, () => {

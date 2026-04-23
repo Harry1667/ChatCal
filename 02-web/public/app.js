@@ -439,45 +439,142 @@ async function deleteEvt() {
   }
 }
 
-// === 設定 ===
+// === 深色模式 ===
+function applyDarkMode(on) {
+  document.body.setAttribute('data-theme', on ? 'dark' : '')
+  document.getElementById('darkModeToggle').checked = !!on
+  localStorage.setItem('chatcal_dark', on ? '1' : '')
+}
+
+// === 設定 Modal ===
+let settingsAutoSaveTimer = null
+function debounceAutoSave(key, value) {
+  clearTimeout(settingsAutoSaveTimer)
+  settingsAutoSaveTimer = setTimeout(() => {
+    api('/api/settings', { method: 'PUT', body: JSON.stringify({ [key]: value }) }).catch(() => {})
+  }, 600)
+}
+
+function openSettings() { document.getElementById('settingsOverlay').hidden = false }
+function closeSettings() { document.getElementById('settingsOverlay').hidden = true }
+
 async function loadSettings() {
   try {
     const s = await api('/api/settings')
-    document.getElementById('channelRecord').value = s.discord_channel_record || ''
-    document.getElementById('channelReminder').value = s.discord_channel_reminder || ''
-    document.getElementById('channelDiary').value = s.discord_channel_diary || ''
-    document.getElementById('briefHour').value = s.brief_hour || '8'
-    document.getElementById('briefMinute').value = s.brief_minute || '0'
-    document.getElementById('reflectHour').value = s.reflect_hour || '22'
-    document.getElementById('reflectMinute').value = s.reflect_minute || '0'
-    document.getElementById('weeklyHour').value = s.weekly_hour || '21'
+    document.getElementById('briefHour').value    = s.brief_hour    || '8'
+    document.getElementById('briefMinute').value  = s.brief_minute  || '0'
+    document.getElementById('reflectHour').value  = s.reflect_hour  || '22'
+    document.getElementById('reflectMinute').value= s.reflect_minute|| '0'
+    document.getElementById('weeklyHour').value   = s.weekly_hour   || '21'
     document.getElementById('weeklyMinute').value = s.weekly_minute || '0'
-    document.getElementById('reminderEnabled').checked = s.reminder_enabled === 'true'
-    document.getElementById('reflectEnabled').checked = s.reflect_enabled === 'true'
-    document.getElementById('weeklyEnabled').checked = s.weekly_enabled === 'true'
+    document.getElementById('reminderEnabled').checked = s.reminder_enabled !== 'false'
+    document.getElementById('reflectEnabled').checked  = s.reflect_enabled  !== 'false'
+    document.getElementById('weeklyEnabled').checked   = s.weekly_enabled   !== 'false'
   } catch {}
 }
 
-async function saveSettings() {
-  const body = {
-    discord_channel_record: document.getElementById('channelRecord').value.trim(),
-    discord_channel_reminder: document.getElementById('channelReminder').value.trim(),
-    discord_channel_diary: document.getElementById('channelDiary').value.trim(),
-    brief_hour: document.getElementById('briefHour').value || '8',
-    brief_minute: document.getElementById('briefMinute').value || '0',
-    reflect_hour: document.getElementById('reflectHour').value || '22',
-    reflect_minute: document.getElementById('reflectMinute').value || '0',
-    weekly_hour: document.getElementById('weeklyHour').value || '21',
-    weekly_minute: document.getElementById('weeklyMinute').value || '0',
-    reminder_enabled: document.getElementById('reminderEnabled').checked ? 'true' : 'false',
-    reflect_enabled: document.getElementById('reflectEnabled').checked ? 'true' : 'false',
-    weekly_enabled: document.getElementById('weeklyEnabled').checked ? 'true' : 'false',
-  }
+// Discord Targets
+async function loadTargets() {
   try {
-    await api('/api/settings', { method: 'PUT', body: JSON.stringify(body) })
-    toast('設定已存')
-  } catch (err) {
-    toast('存設定失敗：' + err.message)
+    const targets = await api('/api/discord-targets')
+    renderTargets(targets)
+  } catch {}
+}
+
+function renderTargets(targets) {
+  const list = document.getElementById('targetsList')
+  list.innerHTML = ''
+  for (const t of targets) list.appendChild(makeTargetCard(t))
+}
+
+function makeTargetCard(t) {
+  const card = document.createElement('div')
+  card.className = 'target-card'
+  card.dataset.id = t.id
+
+  const hd = document.createElement('div')
+  hd.className = 'target-card-hd'
+
+  const lbl = document.createElement('span')
+  lbl.className = 'target-label'
+  lbl.textContent = t.label || '未命名'
+
+  const del = document.createElement('button')
+  del.className = 'target-del'
+  del.textContent = '🗑'
+  del.onclick = async () => {
+    if (!confirm(`刪除「${t.label || '此組'}」？`)) return
+    await api(`/api/discord-targets/${t.id}`, { method: 'DELETE' })
+    loadTargets()
+  }
+
+  hd.appendChild(lbl)
+  hd.appendChild(del)
+
+  const fields = document.createElement('div')
+  fields.className = 'target-fields'
+
+  const mkInput = (placeholder, key, val, full) => {
+    const inp = document.createElement('input')
+    inp.type = 'text'
+    inp.placeholder = placeholder
+    inp.value = val || ''
+    if (full) inp.className = 'full'
+    inp.addEventListener('blur', async () => {
+      lbl.textContent = fields.querySelector('[data-key="label"]')?.value || '未命名'
+      const data = {}
+      fields.querySelectorAll('input[data-key]').forEach(i => { data[i.dataset.key] = i.value.trim() || null })
+      await api(`/api/discord-targets/${t.id}`, { method: 'PUT', body: JSON.stringify(data) })
+        .catch(() => {})
+    })
+    inp.dataset.key = key
+    return inp
+  }
+
+  fields.appendChild(mkInput('標籤', 'label', t.label, false))
+  fields.appendChild(mkInput('伺服器 ID', 'server_id', t.server_id, false))
+  fields.appendChild(mkInput('💬 記事頻道 ID', 'channel_record', t.channel_record, true))
+  fields.appendChild(mkInput('🔔 提醒頻道 ID', 'channel_reminder', t.channel_reminder, true))
+  fields.appendChild(mkInput('📓 日記頻道 ID', 'channel_diary', t.channel_diary, true))
+
+  card.appendChild(hd)
+  card.appendChild(fields)
+  return card
+}
+
+// === 鎖定畫面 ===
+async function initLockScreen() {
+  const dark = localStorage.getItem('chatcal_dark')
+  if (dark) applyDarkMode(true)
+
+  try {
+    const { hasPassword } = await fetch('/api/auth').then(r => r.json())
+    if (!hasPassword) return
+    const unlocked = sessionStorage.getItem('chatcal_unlocked')
+    if (unlocked) return
+    document.getElementById('lockScreen').hidden = false
+  } catch {}
+}
+
+async function tryUnlock() {
+  const pwd = document.getElementById('lockPwd').value
+  const err = document.getElementById('lockErr')
+  try {
+    const { ok } = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    }).then(r => r.json())
+    if (ok) {
+      sessionStorage.setItem('chatcal_unlocked', '1')
+      document.getElementById('lockScreen').hidden = true
+      err.textContent = ''
+    } else {
+      err.textContent = '密碼錯誤'
+      document.getElementById('lockPwd').value = ''
+    }
+  } catch {
+    err.textContent = '無法連線'
   }
 }
 
@@ -536,7 +633,66 @@ document.getElementById('modalBackdrop').addEventListener('click', e => {
   if (e.target.id === 'modalBackdrop') closeModal()
 })
 
-document.getElementById('saveSettings').onclick = saveSettings
+// Settings modal
+document.getElementById('settingsBtn').onclick = openSettings
+document.getElementById('settingsClose').onclick = closeSettings
+document.getElementById('settingsOverlay').addEventListener('click', e => {
+  if (e.target.id === 'settingsOverlay') closeSettings()
+})
+
+// Tab switching
+document.querySelectorAll('.stab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'))
+    document.querySelectorAll('.stab-content').forEach(c => c.classList.remove('active'))
+    btn.classList.add('active')
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active')
+    if (btn.dataset.tab === 'discord') loadTargets()
+  })
+})
+
+// Dark mode
+document.getElementById('darkModeToggle').addEventListener('change', e => {
+  applyDarkMode(e.target.checked)
+  api('/api/settings', { method: 'PUT', body: JSON.stringify({ web_dark_mode: e.target.checked ? 'true' : 'false' }) }).catch(() => {})
+})
+
+// Auto-save time settings
+;['briefHour','briefMinute','reflectHour','reflectMinute','weeklyHour','weeklyMinute'].forEach(id => {
+  const key = id.replace(/([A-Z])/g, '_$1').toLowerCase()
+  document.getElementById(id).addEventListener('change', e => debounceAutoSave(key, e.target.value))
+})
+;['reminderEnabled','reflectEnabled','weeklyEnabled'].forEach(id => {
+  const key = id.replace(/([A-Z])/g, '_$1').toLowerCase().replace('_enabled', '_enabled')
+  document.getElementById(id).addEventListener('change', e => {
+    api('/api/settings', { method: 'PUT', body: JSON.stringify({ [key]: e.target.checked ? 'true' : 'false' }) }).catch(() => {})
+  })
+})
+
+// Add discord target
+document.getElementById('addTargetBtn').addEventListener('click', async () => {
+  const t = await api('/api/discord-targets', { method: 'POST', body: JSON.stringify({ label: '新組' }) })
+  loadTargets()
+})
+
+// Password
+document.getElementById('savePassword').onclick = async () => {
+  const pwd = document.getElementById('newPassword').value
+  const status = document.getElementById('pwdStatus')
+  try {
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ web_password: pwd }) })
+    sessionStorage.setItem('chatcal_unlocked', '1')
+    document.getElementById('newPassword').value = ''
+    status.textContent = pwd ? '密碼已設定' : '密碼已清除'
+    setTimeout(() => { status.textContent = '' }, 2000)
+  } catch (err) { status.textContent = '失敗：' + err.message }
+}
+
+// Lock screen
+document.getElementById('lockBtn').onclick = tryUnlock
+document.getElementById('lockPwd').addEventListener('keydown', e => {
+  if (e.key === 'Enter') tryUnlock()
+})
 
 document.getElementById('saveReflection').onclick = saveReflection
 document.getElementById('moodPicker').addEventListener('click', e => {
@@ -557,6 +713,8 @@ document.getElementById('searchInput').addEventListener('focus', () => {
 })
 
 // === 啟動 ===
+applyDarkMode(localStorage.getItem('chatcal_dark') === '1')
+initLockScreen()
 renderTodayChip()
 loadEvents().catch(err => toast('載入失敗：' + err.message))
 loadReflections()

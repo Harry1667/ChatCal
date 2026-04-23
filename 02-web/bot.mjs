@@ -15,8 +15,8 @@ import { parseText } from './ai.mjs'
 import {
   insertEvent, updateEvent, deleteEvent, getEvent,
   getTodayEvents, getRecentEvents, searchEvents,
-  getEventsForAIContext, getInboxEvents,
-  upsertReflection, getReflection, getSetting,
+  getEventsForAIContext, getInboxEvents, getExpandedEvents,
+  upsertReflection, getReflection, getSetting, getDiscordTargets,
 } from './db.mjs'
 import { initCron, sendMorningReport, sendEveningReport, sendWeeklyReview } from './cron.mjs'
 
@@ -155,21 +155,96 @@ function saveOneEvent(parsed, text) {
   })
 }
 
+// === 日記頻道：@ChatCal 4月24日記：... ===
+async function handleDiaryMessage(message, text) {
+  let dateStr = todayStr()
+  let content = text.replace(/^日記[：:]\s*/, '').trim()
+
+  const dateMatch = text.match(/(\d{1,2})月(\d{1,2})日/)
+  if (dateMatch) {
+    const y = new Date().getFullYear()
+    const m = String(parseInt(dateMatch[1])).padStart(2, '0')
+    const d = String(parseInt(dateMatch[2])).padStart(2, '0')
+    dateStr = `${y}-${m}-${d}`
+    content = text.replace(/\d{1,2}月\d{1,2}日[記]?[：:]\s*/, '').trim()
+  }
+
+  if (!content) {
+    await message.reply('日記內容是空的，格式：`4月24日記：今天...`')
+    return
+  }
+
+  const moodEmojis = ['😊', '😌', '🥲', '😤', '😴', '🎉', '💪', '🌧️']
+  let mood = null
+  for (const emoji of moodEmojis) {
+    if (content.startsWith(emoji)) { mood = emoji; content = content.slice(emoji.length).trim(); break }
+  }
+
+  const saved = upsertReflection(dateStr, { mood, text: content })
+  const [, m, d] = dateStr.split('-')
+  const moodPart = saved.mood ? ` ${saved.mood}` : ''
+  await message.reply(`📓 **${parseInt(m)}月${parseInt(d)}日 日記${moodPart}** — 記下了\n\n${saved.text}`)
+}
+
+// === 提醒頻道：再過 X 分鐘/小時提醒我 ===
+function parseSnoozeMinutes(text) {
+  const h = text.match(/(\d+)\s*小時/)
+  if (h) return parseInt(h[1]) * 60
+  const m = text.match(/(\d+)\s*分/)
+  if (m) return parseInt(m[1])
+  if (/待會|等一下|晚點/.test(text)) return 15
+  return null
+}
+
+async function handleReminderMessage(message, text) {
+  const mins = parseSnoozeMinutes(text)
+  if (!mins) {
+    await message.reply('可以說「再提醒我 30 分鐘」或「1 小時後再提醒」。')
+    return
+  }
+  const now = new Date()
+  const upcoming = getExpandedEvents(now, new Date(now.getTime() + 2 * 3600 * 1000))
+    .filter(e => e.status === 'pending' && e.start_time && !e._is_occurrence)
+    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))
+
+  if (upcoming.length === 0) {
+    await message.reply('接下來 2 小時沒有待辦事件可推遲。')
+    return
+  }
+  const ev = upcoming[0]
+  const newTime = new Date(new Date(ev.start_time).getTime() + mins * 60000).toISOString()
+  const updated = updateEvent(ev.id, { start_time: newTime, reminded_30: 0, reminded_60: 0 })
+  const label = mins >= 60 ? `${mins / 60} 小時` : `${mins} 分鐘`
+  await message.reply(`⏰ **${ev.title}** 推遲 ${label}\n新時間：${fmtDateTime(updated.start_time)}`)
+}
+
 // === 訊息流程分流 ===
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return
 
-  const recordChannelId = getSetting('discord_channel_record') || CHANNEL_ID
-  if (recordChannelId) {
-    if (message.channel.id !== recordChannelId) return
-  } else {
-    const isDM = !message.guild
-    const isMentioned = message.mentions.has(client.user)
-    if (!isDM && !isMentioned) return
-  }
+  const targets = getDiscordTargets()
+  const allRecord = new Set(targets.map(t => t.channel_record).filter(Boolean))
+  const allDiary  = new Set(targets.map(t => t.channel_diary).filter(Boolean))
+  const allReminder = new Set(targets.map(t => t.channel_reminder).filter(Boolean))
+  const legacyRecord = getSetting('discord_channel_record') || CHANNEL_ID
+  if (legacyRecord) allRecord.add(legacyRecord)
+
+  const chId = message.channel.id
+  const isDM = !message.guild
+  const isMentioned = message.mentions.has(client.user)
+
+  let channelType = null
+  if (allRecord.has(chId)) channelType = 'record'
+  else if (allDiary.has(chId)) channelType = 'diary'
+  else if (allReminder.has(chId)) channelType = 'reminder'
+  else if (isDM || (targets.length === 0 && isMentioned)) channelType = 'record'
+  else return
 
   const text = message.content.replace(/<@!?\d+>/g, '').trim()
   if (!text) return
+
+  if (channelType === 'diary') return handleDiaryMessage(message, text)
+  if (channelType === 'reminder') return handleReminderMessage(message, text)
 
   await message.channel.sendTyping().catch(() => {})
 

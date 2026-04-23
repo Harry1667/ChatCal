@@ -83,6 +83,18 @@ db.exec(`
   END
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS discord_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL DEFAULT '預設',
+    server_id TEXT,
+    channel_record TEXT,
+    channel_reminder TEXT,
+    channel_diary TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+  )
+`)
+
 // === settings ===
 export function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
@@ -91,6 +103,46 @@ export function getSetting(key) {
 
 export function setSetting(key, value) {
   db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value))
+}
+
+// === discord_targets CRUD ===
+// auto-migrate old single-channel settings on first run
+;(() => {
+  const count = db.prepare('SELECT COUNT(*) as n FROM discord_targets').get().n
+  if (count === 0) {
+    const rec = getSetting('discord_channel_record')
+    const rem = getSetting('discord_channel_reminder')
+    const dia = getSetting('discord_channel_diary')
+    if (rec || rem || dia) {
+      db.prepare(`INSERT INTO discord_targets (label, channel_record, channel_reminder, channel_diary) VALUES (?, ?, ?, ?)`)
+        .run('預設', rec || null, rem || null, dia || null)
+    }
+  }
+})()
+
+export function getDiscordTargets() {
+  return db.prepare('SELECT * FROM discord_targets ORDER BY id ASC').all()
+}
+
+export function getDiscordTargetById(id) {
+  return db.prepare('SELECT * FROM discord_targets WHERE id = ?').get(id)
+}
+
+export function upsertDiscordTarget(data) {
+  if (data.id) {
+    db.prepare(`UPDATE discord_targets SET label=?,server_id=?,channel_record=?,channel_reminder=?,channel_diary=? WHERE id=?`)
+      .run(data.label || '預設', data.server_id || null, data.channel_record || null,
+           data.channel_reminder || null, data.channel_diary || null, data.id)
+    return getDiscordTargetById(data.id)
+  }
+  const r = db.prepare(`INSERT INTO discord_targets (label, server_id, channel_record, channel_reminder, channel_diary) VALUES (?,?,?,?,?)`)
+    .run(data.label || '預設', data.server_id || null, data.channel_record || null,
+         data.channel_reminder || null, data.channel_diary || null)
+  return getDiscordTargetById(r.lastInsertRowid)
+}
+
+export function deleteDiscordTarget(id) {
+  return db.prepare('DELETE FROM discord_targets WHERE id = ?').run(id).changes > 0
 }
 
 // === events CRUD ===
