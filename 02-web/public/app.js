@@ -354,14 +354,13 @@ async function submitQuick() {
     } else {
       input.value = ''
       toast(res.reply || '已寫入手帳')
-      await loadEvents()
       if (res.event?.start_time) {
         const d = toDayStr(res.event.start_time)
         state.currentDate = d
         state.calMonth = new Date(d + 'T00:00:00')
-        renderCalendar()
-        renderTimeline()
       }
+      await loadEvents()
+      if (res.event?.start_time) renderCalendar()
     }
   } catch (err) {
     toast('失敗：' + err.message)
