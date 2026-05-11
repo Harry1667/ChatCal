@@ -248,7 +248,7 @@ function renderUpcoming() {
     const li = document.createElement('li')
     const [Y, M, D] = day.split('-')
     const label = day === today ? '今日' : `${Number(M)}/${Number(D)}`
-    li.innerHTML = `<span class="u-date">${label}</span> ${fmtTime(ev.start_time)} — ${escape(ev.title)}`
+    li.innerHTML = `<span class="u-date">${label}</span> ${fmtTime(ev.start_time)} — ${esc(ev.title)}`
     li.addEventListener('click', () => {
       state.currentDate = day
       state.calMonth = new Date(day + 'T00:00:00')
@@ -301,8 +301,8 @@ async function runSearch() {
             }) + ' ' + fmtTime(ev.start_time)
           : '未定'
         return `<div class="search-hit" data-id="${ev.id}" data-day="${ev.start_time ? toDayStr(ev.start_time) : toDayStr(ev.created_at)}">
-          <div class="search-hit-title">${escape(ev.title)}</div>
-          <div class="search-hit-meta">${escape(t)}</div>
+          <div class="search-hit-title">${esc(ev.title)}</div>
+          <div class="search-hit-meta">${esc(t)}</div>
         </div>`
       }).join('')
       box.querySelectorAll('.search-hit').forEach(el => {
@@ -320,12 +320,12 @@ async function runSearch() {
     }
     box.hidden = false
   } catch (err) {
-    box.innerHTML = `<div class="search-empty">錯誤：${escape(err.message)}</div>`
+    box.innerHTML = `<div class="search-empty">錯誤：${esc(err.message)}</div>`
     box.hidden = false
   }
 }
 
-function escape(s) {
+function esc(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]))
@@ -473,72 +473,144 @@ async function loadSettings() {
   } catch {}
 }
 
-// Discord Targets
-async function loadTargets() {
+// === AI 交流設定 ===
+let _channelTypes = []
+
+async function loadAITalkTab() {
   try {
-    const targets = await api('/api/discord-targets')
-    renderTargets(targets)
+    const [types, servers] = await Promise.all([
+      api('/api/channel-types'),
+      api('/api/discord-targets'),
+    ])
+    _channelTypes = types
+    renderChannelTypes(types)
+    renderDiscordServers(servers, types)
   } catch {}
 }
 
-function renderTargets(targets) {
-  const list = document.getElementById('targetsList')
-  list.innerHTML = ''
-  for (const t of targets) list.appendChild(makeTargetCard(t))
+function renderChannelTypes(types) {
+  const container = document.getElementById('channelTypesList')
+  container.innerHTML = ''
+  const fixedKeys = ['record', 'reminder', 'diary']
+  for (const t of types) {
+    const card = document.createElement('div')
+    card.className = 'ct-card'
+    const isFixed = fixedKeys.includes(t.type_key)
+    card.innerHTML = `
+      <div class="ct-head">
+        <input class="ct-name" value="${esc(t.name)}" placeholder="頻道名稱" ${isFixed ? 'readonly' : ''} />
+        ${isFixed ? '' : `<button class="ct-del-btn" title="刪除此頻道類型">✕</button>`}
+      </div>
+      <textarea class="ct-prompt" rows="4" placeholder="AI 規則，每行一條（留空使用預設）…">${esc(t.prompt || '')}</textarea>
+      <div class="ct-status"></div>
+    `
+    container.appendChild(card)
+
+    const saveType = async () => {
+      const name = card.querySelector('.ct-name').value.trim()
+      const prompt = card.querySelector('.ct-prompt').value
+      const st = card.querySelector('.ct-status')
+      try {
+        await api(`/api/channel-types/${t.id}`, {
+          method: 'PUT', body: JSON.stringify({ name, prompt }),
+        })
+        st.textContent = '已儲存'; setTimeout(() => { st.textContent = '' }, 1500)
+      } catch { st.textContent = '儲存失敗' }
+    }
+    card.querySelector('.ct-name').addEventListener('blur', saveType)
+    card.querySelector('.ct-prompt').addEventListener('blur', saveType)
+    if (!isFixed) {
+      card.querySelector('.ct-del-btn').addEventListener('click', async () => {
+        if (!confirm(`刪除「${t.name}」頻道類型？相關 Discord 頻道設定也會一起刪除。`)) return
+        await api(`/api/channel-types/${t.id}`, { method: 'DELETE' })
+        loadAITalkTab()
+      })
+    }
+  }
 }
 
-function makeTargetCard(t) {
+function renderDiscordServers(servers, types) {
+  const container = document.getElementById('discordServersList')
+  container.innerHTML = ''
+  for (const s of servers) container.appendChild(makeServerCard(s, types))
+}
+
+function makeServerCard(s, types) {
   const card = document.createElement('div')
-  card.className = 'target-card'
-  card.dataset.id = t.id
+  card.className = 'ds-card'
+
+  const labelEl = document.createElement('div')
+  labelEl.className = 'ds-card-label'
+  labelEl.textContent = s.label || '未命名'
+
+  const delBtn = document.createElement('button')
+  delBtn.className = 'target-del'
+  delBtn.textContent = '🗑'
+  delBtn.onclick = async () => {
+    if (!confirm(`刪除「${s.label || '此伺服器'}」？`)) return
+    await api(`/api/discord-targets/${s.id}`, { method: 'DELETE' })
+    loadAITalkTab()
+  }
 
   const hd = document.createElement('div')
-  hd.className = 'target-card-hd'
+  hd.className = 'ds-card-hd'
+  hd.appendChild(labelEl); hd.appendChild(delBtn)
 
-  const lbl = document.createElement('span')
-  lbl.className = 'target-label'
-  lbl.textContent = t.label || '未命名'
+  const body = document.createElement('div')
+  body.className = 'ds-card-body'
 
-  const del = document.createElement('button')
-  del.className = 'target-del'
-  del.textContent = '🗑'
-  del.onclick = async () => {
-    if (!confirm(`刪除「${t.label || '此組'}」？`)) return
-    await api(`/api/discord-targets/${t.id}`, { method: 'DELETE' })
-    loadTargets()
-  }
-
-  hd.appendChild(lbl)
-  hd.appendChild(del)
-
-  const fields = document.createElement('div')
-  fields.className = 'target-fields'
-
-  const mkInput = (placeholder, key, val, full) => {
+  const mkField = (label, key, val) => {
+    const row = document.createElement('div')
+    row.className = 'ds-field'
+    row.innerHTML = `<label>${label}</label>`
     const inp = document.createElement('input')
     inp.type = 'text'
-    inp.placeholder = placeholder
+    inp.placeholder = label
     inp.value = val || ''
-    if (full) inp.className = 'full'
-    inp.addEventListener('blur', async () => {
-      lbl.textContent = fields.querySelector('[data-key="label"]')?.value || '未命名'
-      const data = {}
-      fields.querySelectorAll('input[data-key]').forEach(i => { data[i.dataset.key] = i.value.trim() || null })
-      await api(`/api/discord-targets/${t.id}`, { method: 'PUT', body: JSON.stringify(data) })
-        .catch(() => {})
-    })
     inp.dataset.key = key
-    return inp
+    inp.addEventListener('blur', async () => {
+      const data = {}
+      body.querySelectorAll('input[data-key]').forEach(i => { data[i.dataset.key] = i.value.trim() || null })
+      if (data.label) labelEl.textContent = data.label
+      await api(`/api/discord-targets/${s.id}`, { method: 'PUT', body: JSON.stringify(data) }).catch(() => {})
+    })
+    row.appendChild(inp)
+    return row
   }
 
-  fields.appendChild(mkInput('標籤', 'label', t.label, false))
-  fields.appendChild(mkInput('伺服器 ID', 'server_id', t.server_id, false))
-  fields.appendChild(mkInput('💬 記事頻道 ID', 'channel_record', t.channel_record, true))
-  fields.appendChild(mkInput('🔔 提醒頻道 ID', 'channel_reminder', t.channel_reminder, true))
-  fields.appendChild(mkInput('📓 日記頻道 ID', 'channel_diary', t.channel_diary, true))
+  body.appendChild(mkField('伺服器名稱', 'label', s.label))
+  body.appendChild(mkField('伺服器 ID', 'server_id', s.server_id))
 
+  // 頻道 ID 欄位 — 根據 channel_types 動態產生
+  const chDiv = document.createElement('div')
+  chDiv.className = 'ds-channels'
+  const chTitle = document.createElement('div')
+  chTitle.className = 'ds-channels-title'
+  chTitle.textContent = '頻道設定'
+  chDiv.appendChild(chTitle)
+
+  for (const ct of types) {
+    const existing = (s.channels || []).find(c => c.channel_type_id === ct.id)
+    const row = document.createElement('div')
+    row.className = 'ds-field'
+    row.innerHTML = `<label>${ct.name}</label>`
+    const inp = document.createElement('input')
+    inp.type = 'text'
+    inp.placeholder = `${ct.name} ID`
+    inp.value = existing?.channel_id || ''
+    inp.addEventListener('blur', async () => {
+      await api(`/api/discord-targets/${s.id}/channels`, {
+        method: 'PUT',
+        body: JSON.stringify([{ channel_type_id: ct.id, channel_id: inp.value.trim() || null }]),
+      }).catch(() => {})
+    })
+    row.appendChild(inp)
+    chDiv.appendChild(row)
+  }
+
+  body.appendChild(chDiv)
   card.appendChild(hd)
-  card.appendChild(fields)
+  card.appendChild(body)
   return card
 }
 
@@ -647,7 +719,7 @@ document.querySelectorAll('.stab').forEach(btn => {
     document.querySelectorAll('.stab-content').forEach(c => c.classList.remove('active'))
     btn.classList.add('active')
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active')
-    if (btn.dataset.tab === 'discord') loadTargets()
+    if (btn.dataset.tab === 'aitalk') loadAITalkTab()
   })
 })
 
@@ -663,16 +735,20 @@ document.getElementById('darkModeToggle').addEventListener('change', e => {
   document.getElementById(id).addEventListener('change', e => debounceAutoSave(key, e.target.value))
 })
 ;['reminderEnabled','reflectEnabled','weeklyEnabled'].forEach(id => {
-  const key = id.replace(/([A-Z])/g, '_$1').toLowerCase().replace('_enabled', '_enabled')
+  const key = id.replace(/([A-Z])/g, '_$1').toLowerCase()
   document.getElementById(id).addEventListener('change', e => {
     api('/api/settings', { method: 'PUT', body: JSON.stringify({ [key]: e.target.checked ? 'true' : 'false' }) }).catch(() => {})
   })
 })
 
-// Add discord target
-document.getElementById('addTargetBtn').addEventListener('click', async () => {
-  const t = await api('/api/discord-targets', { method: 'POST', body: JSON.stringify({ label: '新組' }) })
-  loadTargets()
+// AI交流設定 buttons
+document.getElementById('addChannelTypeBtn').addEventListener('click', async () => {
+  await api('/api/channel-types', { method: 'POST', body: JSON.stringify({ name: '新頻道' }) })
+  loadAITalkTab()
+})
+document.getElementById('addServerBtn').addEventListener('click', async () => {
+  await api('/api/discord-targets', { method: 'POST', body: JSON.stringify({ label: '新伺服器' }) })
+  loadAITalkTab()
 })
 
 // Password
@@ -681,10 +757,16 @@ document.getElementById('savePassword').onclick = async () => {
   const status = document.getElementById('pwdStatus')
   try {
     await api('/api/settings', { method: 'PUT', body: JSON.stringify({ web_password: pwd }) })
-    sessionStorage.setItem('chatcal_unlocked', '1')
     document.getElementById('newPassword').value = ''
-    status.textContent = pwd ? '密碼已設定' : '密碼已清除'
-    setTimeout(() => { status.textContent = '' }, 2000)
+    if (pwd) {
+      sessionStorage.removeItem('chatcal_unlocked')
+      status.textContent = '密碼已設定，請重新整理頁面後輸入密碼'
+      setTimeout(() => location.reload(), 1500)
+    } else {
+      sessionStorage.setItem('chatcal_unlocked', '1')
+      status.textContent = '密碼已清除'
+      setTimeout(() => { status.textContent = '' }, 2000)
+    }
   } catch (err) { status.textContent = '失敗：' + err.message }
 }
 

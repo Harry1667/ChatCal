@@ -17,6 +17,7 @@ import {
   getTodayEvents, getRecentEvents, searchEvents,
   getEventsForAIContext, getInboxEvents, getExpandedEvents,
   upsertReflection, getReflection, getSetting, getDiscordTargets,
+  findChannelType,
 } from './db.mjs'
 import { initCron, sendMorningReport, sendEveningReport, sendWeeklyReview } from './cron.mjs'
 
@@ -219,37 +220,44 @@ async function handleReminderMessage(message, text) {
 }
 
 // === 訊息流程分流 ===
+const _processed = new Set()
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return
-
-  const targets = getDiscordTargets()
-  const allRecord = new Set(targets.map(t => t.channel_record).filter(Boolean))
-  const allDiary  = new Set(targets.map(t => t.channel_diary).filter(Boolean))
-  const allReminder = new Set(targets.map(t => t.channel_reminder).filter(Boolean))
-  const legacyRecord = getSetting('discord_channel_record') || CHANNEL_ID
-  if (legacyRecord) allRecord.add(legacyRecord)
+  if (_processed.has(message.id)) return
+  _processed.add(message.id)
+  setTimeout(() => _processed.delete(message.id), 60000)
 
   const chId = message.channel.id
   const isDM = !message.guild
   const isMentioned = message.mentions.has(client.user)
 
-  let channelType = null
-  if (allRecord.has(chId)) channelType = 'record'
-  else if (allDiary.has(chId)) channelType = 'diary'
-  else if (allReminder.has(chId)) channelType = 'reminder'
-  else if (isDM || (targets.length === 0 && isMentioned)) channelType = 'record'
-  else return
+  // 從 DB 反查頻道類型（支援動態新增的頻道類型）
+  const channelTypeDef = findChannelType(chId)
+  const targets = getDiscordTargets()
+  const legacyRecord = getSetting('discord_channel_record') || CHANNEL_ID
 
-  const text = message.content.replace(/<@!?\d+>/g, '').trim()
+  let channelTypeKey = null
+  let channelPrompt = ''
+
+  if (channelTypeDef) {
+    channelTypeKey = channelTypeDef.type_key
+    channelPrompt = channelTypeDef.prompt || ''
+  } else if (chId === legacyRecord) {
+    channelTypeKey = 'record'
+  } else if (isDM || (targets.length === 0 && isMentioned)) {
+    channelTypeKey = 'record'
+  } else return
+
+  const text = message.content.replace(/<@[!&]?\d+>/g, '').trim()
   if (!text) return
 
-  if (channelType === 'diary') return handleDiaryMessage(message, text)
-  if (channelType === 'reminder') return handleReminderMessage(message, text)
+  if (channelTypeKey === 'diary') return handleDiaryMessage(message, text)
+  if (channelTypeKey === 'reminder') return handleReminderMessage(message, text)
 
   await message.channel.sendTyping().catch(() => {})
 
   const context = getEventsForAIContext()
-  const result = await parseText(text, context)
+  const result = await parseText(text, context, channelPrompt)
 
   try {
     switch (result.type) {

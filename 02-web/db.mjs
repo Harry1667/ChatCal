@@ -95,6 +95,86 @@ db.exec(`
   )
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS channel_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type_key TEXT UNIQUE NOT NULL,
+    prompt TEXT,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+  )
+`)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS discord_channel_maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_id INTEGER NOT NULL,
+    channel_type_id INTEGER NOT NULL,
+    channel_id TEXT,
+    channel_label TEXT,
+    UNIQUE(target_id, channel_type_id)
+  )
+`)
+
+const DEFAULT_PROMPTS = {
+  record: `回覆時間一律用 24 小時制（14:30 不是「下午 2:30」）
+事件分類：工作接案選 work，學校課業選 study，生活日常選 life，不確定選 none
+有「緊急」「截止」「deadline」「一定要」等詞，is_urgent 設 1
+回覆確認訊息簡潔，1-2 句話`,
+  reminder: `解析「再提醒我 X 分鐘/小時」，回覆推遲後的新時間
+若無法辨識時間，請用一句話引導使用者重新說明
+回覆語氣輕鬆，不要太制式`,
+  diary: `保留日記的情感細節，不要過度精簡
+從內容自動判斷心情 emoji
+以溫暖、不說教的語氣回應，1-2 句話`,
+}
+
+// 初始化預設頻道類型（含預設規則）
+;(() => {
+  const count = db.prepare('SELECT COUNT(*) as n FROM channel_types').get().n
+  if (count === 0) {
+    const stmt = db.prepare('INSERT INTO channel_types (name, type_key, prompt, sort_order) VALUES (?, ?, ?, ?)')
+    stmt.run('記事頻道', 'record',   DEFAULT_PROMPTS.record,   0)
+    stmt.run('提醒頻道', 'reminder', DEFAULT_PROMPTS.reminder, 1)
+    stmt.run('日記頻道', 'diary',    DEFAULT_PROMPTS.diary,    2)
+  } else {
+    // 補填舊資料沒有 prompt 的情況
+    const upd = db.prepare("UPDATE channel_types SET prompt = ? WHERE type_key = ? AND (prompt IS NULL OR prompt = '')")
+    upd.run(DEFAULT_PROMPTS.record,   'record')
+    upd.run(DEFAULT_PROMPTS.reminder, 'reminder')
+    upd.run(DEFAULT_PROMPTS.diary,    'diary')
+    // 舊 ai_extra_rules → record 頻道
+    const oldRules = db.prepare("SELECT value FROM settings WHERE key = 'ai_extra_rules'").get()
+    if (oldRules?.value?.trim()) {
+      const rec = db.prepare("SELECT id, prompt FROM channel_types WHERE type_key = 'record'").get()
+      if (rec && !rec.prompt?.includes(oldRules.value.trim())) {
+        db.prepare('UPDATE channel_types SET prompt = ? WHERE type_key = ?')
+          .run((rec.prompt || '') + '\n' + oldRules.value.trim(), 'record')
+      }
+    }
+  }
+})()
+
+// 將舊 discord_targets 的 channel 欄位遷移到 channel_maps
+;(() => {
+  const targets = db.prepare('SELECT * FROM discord_targets').all()
+  const getTypeId = (key) => db.prepare('SELECT id FROM channel_types WHERE type_key = ?').get(key)?.id
+  const insertMap = db.prepare(`
+    INSERT OR IGNORE INTO discord_channel_maps (target_id, channel_type_id, channel_id)
+    VALUES (?, ?, ?)
+  `)
+  for (const t of targets) {
+    const cols = { record: t.channel_record, reminder: t.channel_reminder, diary: t.channel_diary }
+    for (const [key, chId] of Object.entries(cols)) {
+      if (chId) {
+        const typeId = getTypeId(key)
+        if (typeId) insertMap.run(t.id, typeId, chId)
+      }
+    }
+  }
+})()
+
 // === settings ===
 export function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
@@ -114,8 +194,13 @@ export function setSetting(key, value) {
     const rem = getSetting('discord_channel_reminder')
     const dia = getSetting('discord_channel_diary')
     if (rec || rem || dia) {
-      db.prepare(`INSERT INTO discord_targets (label, channel_record, channel_reminder, channel_diary) VALUES (?, ?, ?, ?)`)
-        .run('預設', rec || null, rem || null, dia || null)
+      const r = db.prepare('INSERT INTO discord_targets (label) VALUES (?)').run('預設')
+      const id = r.lastInsertRowid
+      const getTypeId = (key) => db.prepare('SELECT id FROM channel_types WHERE type_key = ?').get(key)?.id
+      const ins = db.prepare('INSERT OR IGNORE INTO discord_channel_maps (target_id, channel_type_id, channel_id) VALUES (?, ?, ?)')
+      if (rec) { const tid = getTypeId('record');   if (tid) ins.run(id, tid, rec) }
+      if (rem) { const tid = getTypeId('reminder'); if (tid) ins.run(id, tid, rem) }
+      if (dia) { const tid = getTypeId('diary');    if (tid) ins.run(id, tid, dia) }
     }
   }
 })()
@@ -130,19 +215,77 @@ export function getDiscordTargetById(id) {
 
 export function upsertDiscordTarget(data) {
   if (data.id) {
-    db.prepare(`UPDATE discord_targets SET label=?,server_id=?,channel_record=?,channel_reminder=?,channel_diary=? WHERE id=?`)
-      .run(data.label || '預設', data.server_id || null, data.channel_record || null,
-           data.channel_reminder || null, data.channel_diary || null, data.id)
+    db.prepare('UPDATE discord_targets SET label=?, server_id=? WHERE id=?')
+      .run(data.label || '預設', data.server_id || null, data.id)
     return getDiscordTargetById(data.id)
   }
-  const r = db.prepare(`INSERT INTO discord_targets (label, server_id, channel_record, channel_reminder, channel_diary) VALUES (?,?,?,?,?)`)
-    .run(data.label || '預設', data.server_id || null, data.channel_record || null,
-         data.channel_reminder || null, data.channel_diary || null)
+  const r = db.prepare('INSERT INTO discord_targets (label, server_id) VALUES (?, ?)')
+    .run(data.label || '預設', data.server_id || null)
   return getDiscordTargetById(r.lastInsertRowid)
 }
 
 export function deleteDiscordTarget(id) {
+  db.prepare('DELETE FROM discord_channel_maps WHERE target_id = ?').run(id)
   return db.prepare('DELETE FROM discord_targets WHERE id = ?').run(id).changes > 0
+}
+
+// === channel_types CRUD ===
+export function getChannelTypes() {
+  return db.prepare('SELECT * FROM channel_types ORDER BY sort_order, id').all()
+}
+
+export function getChannelTypeByKey(typeKey) {
+  return db.prepare('SELECT * FROM channel_types WHERE type_key = ?').get(typeKey)
+}
+
+export function upsertChannelType(data) {
+  if (data.id) {
+    db.prepare('UPDATE channel_types SET name=?, prompt=? WHERE id=?')
+      .run(data.name || '頻道', data.prompt || null, data.id)
+    return db.prepare('SELECT * FROM channel_types WHERE id=?').get(data.id)
+  }
+  const n = db.prepare('SELECT COUNT(*) as n FROM channel_types').get().n
+  const typeKey = `custom_${Date.now()}`
+  const r = db.prepare('INSERT INTO channel_types (name, type_key, prompt, sort_order) VALUES (?, ?, ?, ?)')
+    .run(data.name || '新頻道', typeKey, data.prompt || null, n)
+  return db.prepare('SELECT * FROM channel_types WHERE id=?').get(r.lastInsertRowid)
+}
+
+export function deleteChannelType(id) {
+  db.prepare('DELETE FROM discord_channel_maps WHERE channel_type_id=?').run(id)
+  return db.prepare('DELETE FROM channel_types WHERE id=?').run(id).changes > 0
+}
+
+// === discord_channel_maps ===
+export function getDiscordChannelMaps(targetId) {
+  return db.prepare(`
+    SELECT m.id, m.target_id, m.channel_type_id, m.channel_id, m.channel_label,
+           ct.name as type_name, ct.type_key
+    FROM discord_channel_maps m
+    JOIN channel_types ct ON ct.id = m.channel_type_id
+    WHERE m.target_id = ?
+    ORDER BY ct.sort_order, ct.id
+  `).all(targetId)
+}
+
+export function upsertDiscordChannelMap(targetId, channelTypeId, channelId, channelLabel) {
+  db.prepare(`
+    INSERT INTO discord_channel_maps (target_id, channel_type_id, channel_id, channel_label)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(target_id, channel_type_id)
+    DO UPDATE SET channel_id = excluded.channel_id, channel_label = excluded.channel_label
+  `).run(targetId, channelTypeId, channelId || null, channelLabel || null)
+}
+
+// 從 Discord 頻道 ID 反查頻道類型（給 bot 路由用）
+export function findChannelType(discordChannelId) {
+  return db.prepare(`
+    SELECT ct.*
+    FROM discord_channel_maps m
+    JOIN channel_types ct ON ct.id = m.channel_type_id
+    WHERE m.channel_id = ?
+    LIMIT 1
+  `).get(discordChannelId)
 }
 
 // === events CRUD ===

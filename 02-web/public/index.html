@@ -26,7 +26,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div class="today-chip" id="todayChip">—</div>
-          <button class="settings-btn" id="settingsBtn" title="設定">⚙</button>
+          <button class="settings-btn" id="settingsBtn" title="設定">⚙ 設定</button>
         </div>
       </div>
 
@@ -179,7 +179,7 @@
       </div>
       <div class="settings-tabs">
         <button class="stab active" data-tab="general">一般</button>
-        <button class="stab" data-tab="discord">Discord</button>
+        <button class="stab" data-tab="aitalk">AI 交流設定</button>
         <button class="stab" data-tab="security">安全</button>
       </div>
       <div class="settings-body">
@@ -231,11 +231,23 @@
           </div>
         </div>
 
-        <!-- Discord -->
-        <div class="stab-content" id="tab-discord">
-          <div class="s-label" style="margin-bottom:12px">多組伺服器 / 頻道設定，自動儲存</div>
-          <div id="targetsList"></div>
-          <button class="add-target-btn" id="addTargetBtn">＋ 新增一組</button>
+        <!-- AI 交流設定 -->
+        <div class="stab-content" id="tab-aitalk">
+          <div class="s-group">
+            <div class="s-section-head">
+              <div class="s-label">AI 頻道規則</div>
+              <button class="btn-sm" id="addChannelTypeBtn">＋ 新增頻道</button>
+            </div>
+            <p class="pwd-hint">每個頻道類型可設定獨立的 AI 規則，留空代表使用預設。</p>
+            <div id="channelTypesList"></div>
+          </div>
+          <div class="s-group">
+            <div class="s-section-head">
+              <div class="s-label">Discord 伺服器</div>
+              <button class="btn-sm" id="addServerBtn">＋ 新增伺服器</button>
+            </div>
+            <div id="discordServersList"></div>
+          </div>
         </div>
 
         <!-- 安全 -->

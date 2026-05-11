@@ -33,6 +33,8 @@ import {
   getEventsByStatusInRange,
   getSetting, setSetting,
   getDiscordTargets, upsertDiscordTarget, deleteDiscordTarget,
+  getChannelTypes, upsertChannelType, deleteChannelType,
+  getDiscordChannelMaps, upsertDiscordChannelMap,
 } from './db.mjs'
 import { parseText } from './ai.mjs'
 
@@ -84,7 +86,8 @@ app.post('/api/events', auth, async (req, res) => {
   const { text } = req.body
   if (!text || !text.trim()) return res.status(400).json({ error: '請輸入文字' })
 
-  const parsed = await parseText(text.trim(), [])
+  const extraRules = getSetting('ai_extra_rules') || ''
+  const parsed = await parseText(text.trim(), [], extraRules)
   if (parsed.type === 'chat') return res.json({ chat: true, reply: parsed.reply })
 
   if (parsed.type === 'reflect') {
@@ -253,6 +256,7 @@ app.get('/api/settings', auth, (req, res) => {
     discord_channel_record: getSetting('discord_channel_record') || '',
     discord_channel_reminder: getSetting('discord_channel_reminder') || '',
     discord_channel_diary: getSetting('discord_channel_diary') || '',
+    ai_extra_rules: getSetting('ai_extra_rules') || '',
   })
 })
 
@@ -268,13 +272,36 @@ app.put('/api/settings', auth, (req, res) => {
     if (cronKeys.includes(k)) setSetting('cron_' + k, String(v))
     else if (discordKeys.includes(k)) setSetting(k, String(v))
     else if (k === 'web_password') setSetting('web_password', String(v))
+    else if (k === 'ai_extra_rules') setSetting('ai_extra_rules', String(v))
   }
   res.json({ success: true })
 })
 
+// === channel-types ===
+app.get('/api/channel-types', auth, (req, res) => {
+  try { res.json(getChannelTypes()) } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/channel-types', auth, (req, res) => {
+  try { res.json(upsertChannelType(req.body)) } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.put('/api/channel-types/:id', auth, (req, res) => {
+  try { res.json(upsertChannelType({ id: parseInt(req.params.id), ...req.body })) }
+  catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/channel-types/:id', auth, (req, res) => {
+  try { res.json({ ok: deleteChannelType(parseInt(req.params.id)) }) }
+  catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // === discord-targets ===
 app.get('/api/discord-targets', auth, (req, res) => {
-  try { res.json(getDiscordTargets()) } catch (err) { res.status(500).json({ error: err.message }) }
+  try {
+    const targets = getDiscordTargets()
+    res.json(targets.map(t => ({ ...t, channels: getDiscordChannelMaps(t.id) })))
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 app.post('/api/discord-targets', auth, (req, res) => {
@@ -289,11 +316,20 @@ app.put('/api/discord-targets/:id', auth, (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-app.delete('/api/discord-targets/:id', auth, (req, res) => {
+app.put('/api/discord-targets/:id/channels', auth, (req, res) => {
+  const targetId = parseInt(req.params.id)
+  const maps = req.body // [{ channel_type_id, channel_id, channel_label }]
   try {
-    const ok = deleteDiscordTarget(parseInt(req.params.id))
-    res.json({ ok })
+    for (const m of (maps || [])) {
+      upsertDiscordChannelMap(targetId, m.channel_type_id, m.channel_id, m.channel_label)
+    }
+    res.json(getDiscordChannelMaps(targetId))
   } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/discord-targets/:id', auth, (req, res) => {
+  try { res.json({ ok: deleteDiscordTarget(parseInt(req.params.id)) }) }
+  catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // === auth (web password gate) ===

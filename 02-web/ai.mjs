@@ -207,9 +207,16 @@ current_datetime: ${now}
   }
 }
 
+function applyExtraRules(system, extraRules) {
+  if (!extraRules || !extraRules.trim()) return system
+  return system + '\n\n【使用者自訂規則（優先於上面的規則）】\n' + extraRules.trim()
+}
+
 // === 解析文字 ===
-export async function parseText(text, context = []) {
-  const { system, prompt } = buildEventPrompt(text, context)
+export async function parseText(text, context = [], extraRules = '') {
+  const base = buildEventPrompt(text, context)
+  const system = applyExtraRules(base.system, extraRules)
+  const prompt = base.prompt
 
   const validator = (resp) => {
     const raw = (resp.content || '').trim()

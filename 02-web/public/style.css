@@ -710,20 +710,26 @@ html, body {
 [data-theme="dark"] body {
   background: radial-gradient(ellipse at top, #1e1a10 0%, #120f07 100%);
 }
+[data-theme="dark"] .reflection-card {
+  background: rgba(255, 255, 255, 0.04);
+}
 
 /* === 設定按鈕（masthead） === */
 .settings-btn {
-  background: transparent;
-  border: 1px solid var(--rule);
-  color: var(--ink-3);
-  font-size: 16px;
-  padding: 4px 8px;
-  border-radius: 2px;
+  background: var(--stamp);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  padding: 5px 12px;
+  border-radius: 3px;
   cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1;
+  transition: opacity 0.15s;
+  line-height: 1.4;
+  white-space: nowrap;
 }
-.settings-btn:hover { border-color: var(--stamp); color: var(--stamp); }
+.settings-btn:hover { opacity: 0.85; }
 
 /* === 設定 Modal === */
 .settings-overlay {
@@ -766,7 +772,10 @@ html, body {
   padding: 0 24px;
   border-bottom: 1px solid var(--rule);
   flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.settings-tabs::-webkit-scrollbar { display: none; }
 .stab {
   background: transparent;
   border: none;
@@ -900,6 +909,142 @@ html, body {
   letter-spacing: 0.1em;
 }
 .add-target-btn:hover { border-color: var(--stamp); color: var(--stamp); }
+
+/* === AI 交流設定 === */
+.s-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.btn-sm {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.05em;
+}
+.btn-sm:hover { border-color: var(--stamp); color: var(--stamp); }
+
+/* Channel type cards */
+.ct-card {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--paper-2);
+}
+.ct-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ct-name {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  padding: 3px 0;
+}
+.ct-name:focus { outline: none; border-bottom-color: var(--stamp); }
+.ct-name[readonly] { border-bottom-color: transparent; cursor: default; }
+.ct-del-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+.ct-del-btn:hover { background: var(--stamp); color: #fff; }
+.ct-prompt {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  padding: 6px 8px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.ct-prompt:focus { outline: none; border-color: var(--stamp); }
+.ct-prompt::placeholder { color: var(--ink-3); }
+.ct-status { font-size: 11px; color: var(--leaf); margin-top: 4px; min-height: 14px; }
+
+/* Discord server cards */
+.ds-card {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.ds-card-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--rule);
+}
+.ds-card-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ds-card-body {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.ds-field {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.ds-field label {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-field input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  padding: 3px 2px;
+}
+.ds-field input:focus { outline: none; border-bottom-color: var(--stamp); }
+.ds-field input::placeholder { color: var(--ink-3); font-size: 11px; }
+.ds-channels { margin-top: 4px; }
+.ds-channels-title {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+}
 
 /* security tab */
 .pwd-row {

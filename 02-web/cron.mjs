@@ -14,7 +14,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import {
   getTodayEvents, getTomorrowEvents,
   getPendingReminders, updateEvent, markOverdueMissed,
-  getSetting, getDiscordTargets,
+  getSetting, getDiscordTargets, getDiscordChannelMaps,
   getEventsByStatusInRange, getReflectionsByRange,
 } from './db.mjs'
 import { writeWeeklyReview, generateReflectionPrompt } from './ai.mjs'
@@ -79,11 +79,20 @@ export function initCron(client) {
   console.log('[Cron] 已排程（早報 / 晚報 / 週回顧 / 提醒）')
 }
 
-async function sendToChannel(payload, type = 'reminder') {
+async function sendToChannel(payload, typeKey = 'reminder') {
   if (!discordClient) return
   const targets = getDiscordTargets()
-  const ids = new Set(targets.map(t => t['channel_' + type]).filter(Boolean))
-  if (ids.size === 0 && CHANNEL_ID_ENV) ids.add(CHANNEL_ID_ENV)
+  const ids = new Set()
+  for (const t of targets) {
+    const maps = getDiscordChannelMaps(t.id)
+    const m = maps.find(x => x.type_key === typeKey)
+    if (m?.channel_id) ids.add(m.channel_id)
+  }
+  // legacy fallback
+  if (ids.size === 0) {
+    const legacy = getSetting('discord_channel_' + typeKey) || CHANNEL_ID_ENV
+    if (legacy) ids.add(legacy)
+  }
   for (const channelId of ids) {
     const ch = await discordClient.channels.fetch(channelId).catch(() => null)
     if (ch) await ch.send(payload).catch(err => console.error('[Cron] send failed:', err.message))
