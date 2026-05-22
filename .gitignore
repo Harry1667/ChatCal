@@ -22,3 +22,11 @@ __pycache__/
 # 部署密碼文件（禁止上傳）
 01-dev/001-deploy-docs/deploymemorydoc.md
 .gstack/
+
+# === Private dev notes (git-safety rules) ===
+01-dev/0-run.md
+01-dev/9-talk.md
+01-dev/0-runset.md
+01-dev/001-deploy-docs/
+01-dev/10-deploy-docs/
+.gstack/
