@@ -49,3 +49,57 @@ cp .env.example .env
 # 填入 DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, PROXYCLI_TOKEN
 npm run dev   # 同時啟動 API server + Discord Bot
 ```
+
+---
+
+## English
+
+A Discord-native bullet journal bot. Talk naturally in Discord — AI parses your messages into calendar events and diary entries, synced to a web UI. Built to eliminate input friction and the fragmentation of personal data across apps.
+
+### Discord input — 8 intents auto-detected
+
+| Intent | Example | Result |
+|--------|---------|--------|
+| New event | "Meet professor tomorrow 3pm to discuss thesis" | Save event + Embed confirmation + action buttons |
+| Batch add | "Three things tomorrow: 9am standup, afternoon report, evening groceries" | Saves all three at once |
+| Recurring | "Basketball every Wednesday 3pm" | Auto-expands future Wednesdays |
+| Edit | "Move the 3pm thesis chat to 4:30" | AI locates and edits |
+| Done | "Finished writing the paper" | status → done |
+| Cancel | "Cancel tonight's hotpot" | Deletes event |
+| Diary | "Tired today but the feature finally works, feels great" | AI picks emoji + cleans up, saves as diary |
+| Chit-chat | "Hi" | Replies, doesn't save |
+
+**Time parsing**: "2pm" → 14:00; "evening" → 20:00; date with no time → 09:00; no time at all → saved to inbox as "undated"
+
+**Conflict detection**: when overlapping, the bot warns and attaches `[Confirm] [Cancel]` buttons.
+
+### Auto push notifications
+
+| Push | When | Content |
+|------|------|---------|
+| ☀️ Morning brief | Daily 08:00 | Today's schedule + todos + recurring events |
+| 🌙 Evening brief | Daily 22:00 | Tomorrow preview + AI reflection prompt |
+| 📊 Weekly review | Sun 21:00 | Done / missed / continuing + AI journal-style summary |
+| ⏰ Pre-event | 60 / 30 min before | Countdown reminder |
+
+All pushes use Discord Embed with category-coloured borders (life / study / work).
+
+### Web UI
+- Calendar view (month / week / day)
+- Inbox: undated events in one place
+- Category tab filter (isolate life / study / work)
+- Push schedule settings
+
+### Tech stack
+- Node.js + Discord.js (bot)
+- better-sqlite3 (local DB)
+- proxycli (AI intent parsing: GPT-4o-mini / Gemini Flash)
+- Deployed at chatcal.looptw.com (port 3002)
+
+### Quick start
+```bash
+cd 02-web
+cp .env.example .env
+# Fill in DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, PROXYCLI_TOKEN
+npm run dev   # Starts API server + Discord Bot
+```
